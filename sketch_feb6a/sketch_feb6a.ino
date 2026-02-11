@@ -1,11 +1,10 @@
-/* 
+/*
   Programador........................: (C) Hugo Fernandes
-  Data...............................:     29/12/2025
-  Observações........................: Em baixo hehe :D
-    Arduino UNO R4 WiFi
-    Carro Bluetooth + Máquina de Estados
-    HC-SR04 na Frente e Trás
-    Matriz LED "NO!" quando encontra obstáculo
+  Data...............................: 29/12/2025
+  Arduino UNO R4 WiFi
+  Carro Bluetooth + Máquina de Estados
+  HC-SR04 Frente e Trás
+  Matriz LED "NO!" quando encontra obstáculo
 */
 
 #include <ArduinoBLE.h>
@@ -14,24 +13,23 @@
 
 ArduinoLEDMatrix matrix;
 
-//  Motores defenidos
-int IN1 = 8, 
-IN2 = 9, 
-IN3 = 10, 
-IN4 = 11;
-int ENA = 5, 
-ENB = 6;
-int velocidade = 200;
+// Pinos do Motor L298N
+const byte IN1 = 8;
+const byte IN2 = 9;
+const byte IN3 = 10;
+const byte IN4 = 11;
+const byte ENA = 5;
+const byte ENB = 6;
 
-// Sensor Frente
-const int trigFront = 2;
-const int echoFront = 3;
+byte VELOCIDADE = 200;
 
-// Sensor Trás 
-const int trigBack = 4;
-const int echoBack = 7;
+// Sensores
+const byte TRIG_FRONT = 2;
+const byte ECHO_FRONT = 3;
+const byte TRIG_BACK  = 4;
+const byte ECHO_BACK  = 7;
 
-// Bluetooth  que está no site do Arduino
+// Bluetooth
 BLEService robotService("19B10000-E8F2-537E-4F6C-D104768A1214");
 BLEByteCharacteristic commandChar(
   "19B10001-E8F2-537E-4F6C-D104768A1214",
@@ -39,29 +37,30 @@ BLEByteCharacteristic commandChar(
 );
 
 // Estados
-#define avancar   1
-#define tras      2
-#define direita   3
-#define esquerda  4
-#define parar     5
+#define AVANCAR   1
+#define TRAS      2
+#define DIREITA   3
+#define ESQUERDA  4
+#define PARAR     5
 
-int estadoAtual = parar;
+int estadoAtual = PARAR;
 char command = 'S';
 
 void setup() {
+
   Serial.begin(9600);
 
-  pinMode(IN1, OUTPUT); 
+  pinMode(IN1, OUTPUT);
   pinMode(IN2, OUTPUT);
-  pinMode(IN3, OUTPUT); 
+  pinMode(IN3, OUTPUT);
   pinMode(IN4, OUTPUT);
-  pinMode(ENA, OUTPUT); 
+  pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
 
-  pinMode(trigFront, OUTPUT);
-  pinMode(echoFront, INPUT);
-  pinMode(trigBack, OUTPUT);
-  pinMode(echoBack, INPUT);
+  pinMode(TRIG_FRONT, OUTPUT);
+  pinMode(ECHO_FRONT, INPUT);
+  pinMode(TRIG_BACK, OUTPUT);
+  pinMode(ECHO_BACK, INPUT);
 
   matrix.begin();
   matrix.clear();
@@ -74,58 +73,58 @@ void setup() {
   BLE.advertise();
 }
 
+//Switch Case da Maquina de Estados
+
 void loop() {
+
   BLEDevice central = BLE.central();
 
   if (central) {
+
     while (central.connected()) {
 
-      // Comando
       if (commandChar.written()) {
         command = commandChar.value();
         atualizarEstado();
       }
 
-      // Leitura dos Sensores
-      float distFront = lerDistancia(trigFront, echoFront);
-      float distBack  = lerDistancia(trigBack, echoBack);
+      float distFront = lerDistancia(TRIG_FRONT, ECHO_FRONT);
+      float distBack  = lerDistancia(TRIG_BACK, ECHO_BACK);
 
-      bool obstaculoFrente = distFront <= 20;
-      bool obstaculoTras   = distBack  <= 20;
+      bool OBSTACULOFRENTE = distFront <= 20;
+      bool OBSTACULOTRAS   = distBack  <= 20;
 
-      // LED
-      if (obstaculoFrente || obstaculoTras) {
+      if (OBSTACULOFRENTE || OBSTACULOTRAS) {
         showObstacleAnimation();
       } else {
         matrix.clear();
       }
 
-      // Bloquear só a direção perigosa
-      if (estadoAtual == avancar && obstaculoFrente) {
+      if (estadoAtual == AVANCAR && OBSTACULOFRENTE) {
         stopAll();
-        estadoAtual = parar;
+        estadoAtual = PARAR;
       }
 
-      if (estadoAtual == tras && obstaculoTras) {
+      if (estadoAtual == TRAS && OBSTACULOTRAS) {
         stopAll();
-        estadoAtual = parar;
+        estadoAtual = PARAR;
       }
 
-      // Movimentos/switch case da maquina de estados
       switch (estadoAtual) {
-        case avancar:
+
+        case AVANCAR:
           moveForward();
           break;
 
-        case tras:
+        case TRAS:
           moveBackward();
           break;
 
-        case esquerda:
+        case ESQUERDA:
           turnLeft();
           break;
 
-        case direita:
+        case DIREITA:
           turnRight();
           break;
 
@@ -142,70 +141,85 @@ void loop() {
   }
 }
 
-// ===== FUNÇÕES =====
+// Estados
 
 void atualizarEstado() {
-  if (command == 'F') estadoAtual = avancar;
-  else if (command == 'B') estadoAtual = tras;
-  else if (command == 'L') estadoAtual = esquerda;
-  else if (command == 'R') estadoAtual = direita;
-  else estadoAtual = parar;
+
+  if (command == 'F') estadoAtual = AVANCAR;
+  else if (command == 'B') estadoAtual = TRAS;
+  else if (command == 'L') estadoAtual = ESQUERDA;
+  else if (command == 'R') estadoAtual = DIREITA;
+  else estadoAtual = PARAR;
 }
 
-float lerDistancia(int trigPin, int echoPin) {
-  digitalWrite(trigPin, LOW);
-  delayMicroseconds(2);
-  digitalWrite(trigPin, HIGH);
-  delayMicroseconds(10);
-  digitalWrite(trigPin, LOW);
+float lerDistancia(byte TrigPin, byte EchoPin) {
 
-  long dur = pulseIn(echoPin, HIGH, 30000);
-  if (dur == 0) return 999;
+  digitalWrite(TrigPin, LOW);
+  delayMicroseconds(2);
+
+  digitalWrite(TrigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(TrigPin, LOW);
+
+  long dur = pulseIn(EchoPin, HIGH, 30000);
+
+  if (dur == 0) return 404;
+
   return dur * 0.034 / 2;
 }
 
-// void dos movimentos
 void moveForward() {
-  analogWrite(ENA, velocidade);
-  analogWrite(ENB, velocidade);
-  digitalWrite(IN1, HIGH); 
+
+  digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH); 
+  digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
+
+  analogWrite(ENA, VELOCIDADE);
+  analogWrite(ENB, VELOCIDADE);
 }
 
 void moveBackward() {
-  analogWrite(ENA, velocidade);
-  analogWrite(ENB, velocidade);
-  digitalWrite(IN1, LOW); 
+
+  digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW); 
+  digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
+
+  analogWrite(ENA, VELOCIDADE);
+  analogWrite(ENB, VELOCIDADE);
 }
 
 void turnLeft() {
-  analogWrite(ENA, velocidade);
-  analogWrite(ENB, velocidade);
-  digitalWrite(IN1, LOW); 
+
+  digitalWrite(IN1, LOW);
   digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH); 
+  digitalWrite(IN3, HIGH);
   digitalWrite(IN4, LOW);
+
+  analogWrite(ENA, VELOCIDADE);
+  analogWrite(ENB, VELOCIDADE);
 }
 
 void turnRight() {
-  analogWrite(ENA, velocidade);
-  analogWrite(ENB, velocidade);
+
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW); 
+  digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
+
+  analogWrite(ENA, VELOCIDADE);
+  analogWrite(ENB, VELOCIDADE);
+
 }
 
 void stopAll() {
-  digitalWrite(IN1, LOW); 
+
+  digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
-  digitalWrite(IN3, LOW); 
+  digitalWrite(IN3, LOW);
   digitalWrite(IN4, LOW);
+
   analogWrite(ENA, 0);
   analogWrite(ENB, 0);
 }
