@@ -30,9 +30,9 @@ const byte TRIG_BACK  = 4;
 const byte ECHO_BACK  = 7;
 
 // Bluetooth
-BLEService robotService("19B10000-E8F2-537E-4F6C-D104768A1214");
+BLEService robotService("18B10001-E8F2-537E-4F6C-D104768A1215");
 BLEByteCharacteristic commandChar(
-  "19B10001-E8F2-537E-4F6C-D104768A1214",
+  "18B10002-E8F2-537E-4F6C-D104768A1215",
   BLERead | BLEWrite
 );
 
