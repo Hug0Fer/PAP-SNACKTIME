@@ -124,7 +124,7 @@ void loop() {
         if (estadoAtual == TRAS && bloqueioTras) {
           stopAll();
         } else {
-          // ===== Máquina de estados =====
+          // Máquina de estados 
           switch (estadoAtual) {
             case AVANCAR:
               moveForward();
