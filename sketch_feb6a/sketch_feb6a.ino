@@ -21,13 +21,24 @@ const byte IN4 = 11;
 const byte ENA = 5;
 const byte ENB = 6;
 
-byte VELOCIDADE = 200;
+byte velocidade = 250;
 
-// Sensores
-const byte TRIG_FRONT = 2;
-const byte ECHO_FRONT = 3;
-const byte TRIG_BACK  = 4;
-const byte ECHO_BACK  = 7;
+// Sensor da Frente e Trás
+const int trigPinFront = 2;
+const int echoPinFront = 3;
+const int trigPinBack = 4;
+const int echoPinBack = 7;
+
+long duration;
+float distFrente;
+float distTras;
+
+// Bloqueios
+bool bloqueioFrente = false;
+bool bloqueioTras   = false;
+
+// para não repetir animação sem parar
+bool jaMostrouFrente = false;
 
 // Bluetooth
 BLEService robotService("18B10001-E8F2-537E-4F6C-D104768A1215");
@@ -36,7 +47,9 @@ BLEByteCharacteristic commandChar(
   BLERead | BLEWrite
 );
 
-// Estados
+// Estados da maquina
+char command = 'S';
+
 #define AVANCAR   1
 #define TRAS      2
 #define DIREITA   3
@@ -44,10 +57,9 @@ BLEByteCharacteristic commandChar(
 #define PARAR     5
 
 int estadoAtual = PARAR;
-char command = 'S';
 
+// Setup
 void setup() {
-
   Serial.begin(9600);
 
   pinMode(IN1, OUTPUT);
@@ -57,10 +69,11 @@ void setup() {
   pinMode(ENA, OUTPUT);
   pinMode(ENB, OUTPUT);
 
-  pinMode(TRIG_FRONT, OUTPUT);
-  pinMode(ECHO_FRONT, INPUT);
-  pinMode(TRIG_BACK, OUTPUT);
-  pinMode(ECHO_BACK, INPUT);
+  pinMode(trigPinFront, OUTPUT);
+  pinMode(echoPinFront, INPUT);
+
+  pinMode(trigPinBack, OUTPUT);
+  pinMode(echoPinBack, INPUT);
 
   matrix.begin();
   matrix.clear();
@@ -73,64 +86,68 @@ void setup() {
   BLE.advertise();
 }
 
-//Switch Case da Maquina de Estados
-
+// Loop
 void loop() {
-
   BLEDevice central = BLE.central();
 
   if (central) {
-
     while (central.connected()) {
 
+      // Ler sensores
+      distFrente = lerDistancia(trigPinFront, echoPinFront);
+      distTras   = lerDistancia(trigPinBack, echoPinBack);
+
+      // Atualiza bloqueios
+      bloqueioFrente = (distFrente <= 20);
+      bloqueioTras   = (distTras   <= 20);
+
+      // Se recebeu comando
       if (commandChar.written()) {
         command = commandChar.value();
-        atualizarEstado();
+        atualizarEstado(); // aqui já respeita bloqueios
       }
 
-      float distFront = lerDistancia(TRIG_FRONT, ECHO_FRONT);
-      float distBack  = lerDistancia(TRIG_BACK, ECHO_BACK);
+      // INTERCEPTA MOVIMENTO PERIGOSO
+      // Frente bloqueada e está a tentar avançar -> pára e mostra animação (1x por evento)
+      if (estadoAtual == AVANCAR && bloqueioFrente) {
+        stopAll();
 
-      bool OBSTACULOFRENTE = distFront <= 20;
-      bool OBSTACULOTRAS   = distBack  <= 20;
-
-      if (OBSTACULOFRENTE || OBSTACULOTRAS) {
-        showObstacleAnimation();
+        if (!jaMostrouFrente) {
+          showObstacleAnimation();
+          jaMostrouFrente = true;
+        }
       } else {
-        matrix.clear();
-      }
+        // se já não há obstáculo à frente, volta a permitir mostrar numa próxima vez
+        if (!bloqueioFrente) jaMostrouFrente = false;
 
-      if (estadoAtual == AVANCAR && OBSTACULOFRENTE) {
-        stopAll();
-        estadoAtual = PARAR;
-      }
-
-      if (estadoAtual == TRAS && OBSTACULOTRAS) {
-        stopAll();
-        estadoAtual = PARAR;
-      }
-
-      switch (estadoAtual) {
-
-        case AVANCAR:
-          moveForward();
-          break;
-
-        case TRAS:
-          moveBackward();
-          break;
-
-        case ESQUERDA:
-          turnLeft();
-          break;
-
-        case DIREITA:
-          turnRight();
-          break;
-
-        default:
+        // Trás bloqueada e está a tentar recuar -> pára (sem animação)
+        if (estadoAtual == TRAS && bloqueioTras) {
           stopAll();
-          break;
+        } else {
+          // ===== Máquina de estados =====
+          switch (estadoAtual) {
+            case AVANCAR:
+              moveForward();
+              break;
+
+            case TRAS:
+              moveBackward();
+              break;
+
+            case ESQUERDA:
+              turnLeft();
+              break;
+
+            case DIREITA:
+              turnRight();
+              break;
+
+            case PARAR:
+            default:
+              stopAll();
+              break;
+          }
+        }
       }
 
       delay(30);
@@ -141,85 +158,77 @@ void loop() {
   }
 }
 
-// Estados
+// Funções e Estado
 
 void atualizarEstado() {
-
-  if (command == 'F') estadoAtual = AVANCAR;
-  else if (command == 'B') estadoAtual = TRAS;
+  // Bloqueia só o comando perigoso
+  if (command == 'F') {
+    if (!bloqueioFrente) estadoAtual = AVANCAR;
+    else estadoAtual = PARAR; // ignora F (fica parado)
+  }
+  else if (command == 'B') {
+    if (!bloqueioTras) estadoAtual = TRAS;
+    else estadoAtual = PARAR; // ignora B (fica parado)
+  }
   else if (command == 'L') estadoAtual = ESQUERDA;
   else if (command == 'R') estadoAtual = DIREITA;
   else estadoAtual = PARAR;
 }
 
-float lerDistancia(byte TrigPin, byte EchoPin) {
-
-  digitalWrite(TrigPin, LOW);
+float lerDistancia(int trigPin, int echoPin) {
+  digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
-
-  digitalWrite(TrigPin, HIGH);
+  digitalWrite(trigPin, HIGH);
   delayMicroseconds(10);
-  digitalWrite(TrigPin, LOW);
+  digitalWrite(trigPin, LOW);
 
-  long dur = pulseIn(EchoPin, HIGH, 30000);
-
-  if (dur == 0) return 404;
-
-  return dur * 0.034 / 2;
+  duration = pulseIn(echoPin, HIGH, 30000);
+  if (duration == 0) return 999;
+  return duration * 0.034 / 2;
 }
 
+// Movimentos
 void moveForward() {
-
-  digitalWrite(IN1, HIGH);
-  digitalWrite(IN2, LOW);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-
-  analogWrite(ENA, VELOCIDADE);
-  analogWrite(ENB, VELOCIDADE);
+  analogWrite(ENA, velocidade);
+  analogWrite(ENB, velocidade);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, LOW);
+  digitalWrite(IN4, HIGH);
 }
 
 void moveBackward() {
-
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, LOW);
-  digitalWrite(IN4, HIGH);
-
-  analogWrite(ENA, VELOCIDADE);
-  analogWrite(ENB, VELOCIDADE);
+  analogWrite(ENA, velocidade);
+  analogWrite(ENB, velocidade);
+  digitalWrite(IN1, HIGH);
+  digitalWrite(IN2, LOW);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
 }
 
 void turnLeft() {
-
-  digitalWrite(IN1, LOW);
-  digitalWrite(IN2, HIGH);
-  digitalWrite(IN3, HIGH);
-  digitalWrite(IN4, LOW);
-
-  analogWrite(ENA, VELOCIDADE);
-  analogWrite(ENB, VELOCIDADE);
-}
-
-void turnRight() {
-
+  analogWrite(ENA, velocidade);
+  analogWrite(ENB, velocidade);
   digitalWrite(IN1, HIGH);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, HIGH);
+}
 
-  analogWrite(ENA, VELOCIDADE);
-  analogWrite(ENB, VELOCIDADE);
-
+void turnRight() {
+  analogWrite(ENA, velocidade);
+  analogWrite(ENB, velocidade);
+  digitalWrite(IN1, LOW);
+  digitalWrite(IN2, HIGH);
+  digitalWrite(IN3, HIGH);
+  digitalWrite(IN4, LOW);
 }
 
 void stopAll() {
-
   digitalWrite(IN1, LOW);
   digitalWrite(IN2, LOW);
   digitalWrite(IN3, LOW);
   digitalWrite(IN4, LOW);
-
   analogWrite(ENA, 0);
   analogWrite(ENB, 0);
 }
