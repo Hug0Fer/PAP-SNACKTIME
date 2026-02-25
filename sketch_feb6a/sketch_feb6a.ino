@@ -1,10 +1,9 @@
 /*
   Programador........................: (C) Hugo Fernandes
   Data...............................: 29/12/2025
-  Arduino UNO R4 WiFi
-  Carro Bluetooth + Máquina de Estados
-  HC-SR04 Frente e Trás
-  Matriz LED "NO!" quando encontra obstáculo
+  Observações........................: Arduino UNO R4 WiFi, Carro Bluetooth, switch case da Máquina de Estados
+  HC-SR04 Frente e na parte de Trás.
+  Matriz LED a dizer "NO!" quando encontra obstáculo na parte da frente ou na parte de trás.
 */
 
 #include <ArduinoBLE.h>
@@ -37,7 +36,7 @@ float distTras;
 bool bloqueioFrente = false;
 bool bloqueioTras   = false;
 
-// para não repetir animação sem parar
+// Para não repetir animação sem parar
 bool jaMostrouFrente = false;
 
 // Bluetooth
@@ -107,7 +106,7 @@ void loop() {
         atualizarEstado(); // aqui já respeita bloqueios
       }
 
-      // INTERCEPTA MOVIMENTO PERIGOSO
+      // Intercepta movimento perigoso
       // Frente bloqueada e está a tentar avançar -> pára e mostra animação (1x por evento)
       if (estadoAtual == AVANCAR && bloqueioFrente) {
         stopAll();
