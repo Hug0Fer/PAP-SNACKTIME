@@ -109,7 +109,7 @@ void loop() {
       // Intercepta movimento perigoso
       // Frente bloqueada e está a tentar avançar -> pára e mostra animação (1x por evento)
       if (estadoAtual == AVANCAR && bloqueioFrente) {
-        stopAll();
+        estadoAtual = PARAR;
 
         if (!jaMostrouFrente) {
           showObstacleAnimation();
@@ -121,7 +121,7 @@ void loop() {
 
         // Trás bloqueada e está a tentar recuar -> pára (sem animação)
         if (estadoAtual == TRAS && bloqueioTras) {
-          stopAll();
+          estadoAtual = PARAR;
         } else {
           // Máquina de estados 
           switch (estadoAtual) {
