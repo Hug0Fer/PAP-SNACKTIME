@@ -1,7 +1,7 @@
 /*
   Programador........................: (C) Hugo Fernandes
   Data...............................: 29/12/2025
-  Observações........................: Arduino UNO R4 WiFi, Carro Bluetooth, switch case da Máquina de Estados
+  Observações........................: Arduino UNO R4 WiFi, Bluetooth, switch case da Máquina de Estados
   HC-SR04 Frente e na parte de Trás.
   Matriz LED a dizer "NO!" quando encontra obstáculo na parte da frente ou na parte de trás.
 */
